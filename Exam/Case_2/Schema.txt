@@ -1,0 +1,24 @@
+-- Main --
+No: [No:Int]3 , 起票日: [StartDate:DateTime]10 , 起票者: [Voter:String]
+タイトル : [Subject:String]
+
+内容:
+  [Description:String]
+  poupoupou
+
+期限   : [Limit:DateTime]
+担当者 : [Customer:string] -Split
+
+
+-- Reply --
+起票日  　 : [ReplyDate:DateTime]
+対応者　 　: [Responder:String]
+ステータス : [Status:String]
+期限変更   : [LmitChange:DateTime] 
+
+対応:
+[Action:String]
+
+次回対応:
+[NextAction]
+

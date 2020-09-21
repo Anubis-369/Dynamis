@@ -7,25 +7,34 @@
     $Result = $Paragraph_Regex.Matches($Contents)
     $fileinfo = Get-ChildItem $FullName
 
+    $Count = 1
     if ($Result.Count -eq 0){
         % { $Split_Data.Matches( $Contents ) } -PipelineVariable value |
-        %{ New-Object PSObject -Property @{
+        % { New-Object PSObject -Property @{
+            DNo      = 0;
+            CNo      = $Count;
             Data     = "";
             Contents = ($value.Groups["value"].value).Trim() ;
             Fileinfo = $fileinfo
             } | Select-Object Data, Contents, Fileinfo
+            $Count += 1
         }
     }
 
+    $DCount = 0
     % { $Result } -PipelineVariable data |
-    % { $Split_Data.Matches( ($data.Groups["value"].value).Trim()) } -PipelineVariable value |
-    % { New-Object PSObject -Property @{
+    % {  $Dcount += 1;$Split_Data.Matches( ($data.Groups["value"].value).Trim()) } -PipelineVariable value | % { 
+        New-Object PSObject -Property @{
+            DNo      = $Dcount;
+            CNo      = $Count;
             Data     = ($data.Groups["title"].value).Trim();
             Contents = ($value.Groups["value"].value).Trim() ;
             Fileinfo = $fileinfo
-        } | Select-Object Data, Contents, Fileinfo
-    } 
-}
+        } | Select-Object DNo, Data, Contents, Fileinfo
+        $Count += 1
+    }
+} 
+
 
 function Convert-Cologn ($Contents){
     <#
@@ -33,34 +42,50 @@ function Convert-Cologn ($Contents){
     <Title> +: <Value>, s+<Title> +: <Value>
     #>
     $EW = @()
-    $EW += "\s*\S+:(?:\n|$)"
-    $EW += "\s*< \S+ >(?:\n|$)"
-    $EW += "\s*\S+\s*: .+(?:\n|$)"
+    $EW += "\S+:(?:\n|$)"
+    $EW += "< \S+ >(?:\n|$)"
+    $EW += "\S+\s*: .+(?:\n|$)"
     
     $Esc = ("(?:.|\n(?!{" + (@(0..(($EW.count) - 1)) -join ("}|{")) + "}))") -f $EW
     
     $HT = @()
-    $HT += "(?:^|\n)\s*(?<title>\S+):"
-    $HT += "(?:^|\n)\s*< (?<title>\S+) >"
-    $Titles = ("{" + (@(0..(($HT.count) - 1)) -join ("}|{")) + "}") -f $HT
+    $HT += "(?<title>\S+):"
+    $HT += "< (?<title>\S+) >"
+    $Titles = ("(:?(:?{" + (@(0..(($HT.count) - 1)) -join ("})|({")) + "}))") -f $HT
     
-    $Hit_para = "(?<={0})\n(?<value>{1}+)" -f $Titles, $Esc
+    $Hit_para = "(?<=(?<join>^|\n)){0}(?<indent>\n)(?<value>{1}+)" -f $Titles, $Esc
     
-    $Hit_l = "(?<=(?:^|\n|,))\s*(?<title>\S+?)\s*: (?<value>(?:.+?(?=\s+,\s+\S+\s+: )|{0}+))" -f $Esc
+    $Hit_l = "(?<=(?<join>^|\n|(:? , )))(?<title>\S+?)(?<indent>\s*): (?<value>(?:.+?(?= , \S+\s*: )|{0}+))" -f $Esc
     
     $Main = [regex]("(?:{0}|{1})" -f $Hit_para, $Hit_l)
 
     $Count=1
     % { $Main.Matches($Contents) } -PipelineVariable data |
     % { 
-        $n = ([regex]"(\n|\r\n)+$").Matches($data.Groups["value"].value) | % Length
-        if($n -eq 1) { $ber=1 } elseif ($n -le 2) { $ber =2 } else { $ber =0}
+        $Raw    = ($data.Groups["value"].value)
+        $Indent = (([regex]"^ *").Match($Raw) | % Value).length
+        $Value  = $raw.replace(("`n"+" "*$Indent),"`n").Trim()
+        $EndLine = (([regex]"`n*$").Match($Raw) | % Value).length
+
+        # タイトルのインデントを数える。
+        $TitleIndent = ($data.Groups["indent"].value)
+        $CountSpace  =  if( $TitleIndent -eq "`n" ) { 0 } else { $TitleIndent.length }
+        $LongData    =  if( $TitleIndent -eq "`n" ) { $True } else { $False }
+
+        # 結合されているか否か
+        $Join  = if ($data.Groups["join"].value -eq " , ") { $true } else { $false}
+
         New-Object PSObject -Property @{
-            No    = $Count;
-            Key   = (($data.Groups["title"].value).Trim());
-            Value = (($data.Groups["value"].value).Trim());
-            Ber   = $ber
-        }
+            No          = $Count;
+            Key         = ($data.Groups["title"].value).Trim();
+            Value       = $value;
+            String      = ($data.value).Trim();
+            Indent      = $Indent;
+            TitleIndent = $CountSpace;
+            LongData    = $LongData;
+            Join        = $Join;
+            EndLine     = $EndLine
+        } | Select-Object No, Key, Value, String, Indent , TitleIndent, LongData ,Join ,EndLine
         $Count += 1
     }
 }
@@ -70,14 +95,19 @@ function Convert-Datatype  {
         [string]$Option = "",
         [string]$Value = ""
     )
-    Switch -Wildcard ($Option) {
-        "Int" { [int]$Value }
-        "DateTime" { [DateTime]$Value }
-        "DateTime=*" {
-            $Format = ($Value.split("="))[1]
-            [DateTime]::ParseExact($Value,$Format, $null)
+    try {
+        Switch -Wildcard ($Option) {
+            "Int" { [int]$Value }
+            "DateTime" { [DateTime]$Value }
+            "DateTime=*" {
+                $Format = ($Value.split("="))[1]
+                [DateTime]::ParseExact($Value,$Format, $null)
+            }
+            Default { [string]$Value }
         }
-        Default { [string]$Value }
+    }
+    catch {
+        $Value
     }
 }
 
@@ -101,17 +131,16 @@ function Read-DySchema {
         [Parameter(Mandatory=$true)]
         [string[]]$FullName,
         [string[]]$DataNames=@(),
-        [string]$Fileinfo="",
         [string]$Encoding = "UTF8"
     )
-    $Key_Devide = [regex]"^\[(?<Join>,+)(?<Key>\S+)\](:? -(?<Option>.*))?"
-    $g=1
+    $Key_Devide = [regex]"^(?<style>(:?,|l)?)\[(?<Key>\S+)\](:?\[(?<Position>)\])?(:? -(?<Option>.*))?"
+
     $Parent = if( $DataNames.Count -eq 0 ) {
-        $FullName | % { Convert-TexttoData $_ -Encoding $Encoding} |
-        % { $_ | Add-Member -MemberType NoteProperty -Name ID -Value $g ; $g++ ;$_}
+        $FullName | % { Convert-TexttoData $_ -Encoding $Encoding}
     } else {
-        $FullName | % { Convert-TexttoData $_ -Encoding $Encoding} | ?{ $_.Data -in $DataNames } |
-        % { $_ | Add-Member -MemberType NoteProperty -Name ID -Value $g ; $g++;$_}
+        $FullName | % {
+            Convert-TexttoData $_ -Encoding $Encoding} | ?{ $_.Data -in $DataNames
+        }
     }
 
     % { $Parent } -PipelineVariable Master | % { Convert-Cologn $Master.Contents} -PipelineVariable Child |
@@ -119,19 +148,121 @@ function Read-DySchema {
         $Val         =  $Child.value -split "`n"
         $Key         = ($Key_Devide.Matches($Val[0]) | %{ $_.Groups["Key"] }) -split ":"
         $Option      =  $Key_Devide.Matches($Val[0]) | % { $_.Groups["Option"].Value }
-        $Join        =  $Key_Devide.Matches($Val[0]) | % { $_.Groups["Join"].Value }
+        $Position    = ($Key_Devide.Matches($Val[0]) | % { $_.Groups["Position"].Value }) -split ","
         $Description =  if($Val.length -gt 1) {($Val[1..($Val.length-1)] -join "`n").Trim()}
+
+        # インデントの調整
+        $EndLine       = if($Position[0] -ne "") { $Position[0] } else { $Child.EndLine }
+        $TitleIndent   = if($Position.Count -ge 2) { $Position[1] } else { $Child.TitleIndent }
+        $DataIndent    = if($Position.Count -ge 3) { $Position[2] } else { 0 }
+        $Join          = if (($Key_Devide.Matches($Val[0]) | %{ $_.Groups["Style"] }) -eq ",") {
+            $True } else { $Child.Join }
+        $LongData      = if (($Key_Devide.Matches($Val[0]) | %{ $_.Groups["Style"] }) -eq "l") {
+            $True } else { $Child.LongData }
+
         New-Object PSObject -Property @{
-            Data = $Master.Data;
-            Key = $Key[0];
-            Value= $Child.Key;
-            Type = $Key[1];
-            Option = $Option;
-            Ber = $Child.Ber;
-            Join = $Join
+            DNo         = $Master.DNo;
+            Data        = $Master.Data;
+            KNo         = $Child.No;
+            Key         = $Key[0];
+            Value       = $Child.Key;
+            Type        = $Key[1];
+            Option      = $Option;
             Description = $Description;
-            Fileinfo = $Master.Fileinfo
-        } | Select-Object Data,Key,Type,Value,Option,Description,Fileinfo
+            Indent      = $Child.Indent;
+            LongData    = $LongData
+            Join        = $Join;
+            TitleIndent = $TitleIndent;
+            DataIndent  = $DataIndent;
+            EndLine     = $EndLine;
+            Fileinfo    = $Master.Fileinfo
+        } | Select-Object `
+        DNo,Data,KNo,Key,Type,Value,Option,Description,Indent,Join,LongData,
+        TitleIndent,DataIndent,EndLine,Fileinfo
+    }
+}
+
+Function Convert-PSObjectp {
+    param(
+        [String]$Fullame,
+        [string]$Encoding = "UTF8",
+        [psobject]$Schema,
+        [string[]]$DataNames=@(),
+        [string]$Data ="",
+        [string]$Fileinfo=""
+    )
+    $Con = Convert-TexttoData -FullName $Fullame -Encoding $Encoding
+
+    $Con | ? { $_.Data -in $DataNames} -PipelineVariable Line | % {
+        $Sort = $Schema | ? { $_.Data -eq $Line.Data } | Sort-Object KNo | % Key
+        $PSO = New-Object PSObject 
+
+        Foreach ( $d in (Convert-Cologn $Line.Contents) ){
+            $Key  = $d.Key
+            $Type = "String"
+
+            $Schema | ?{ ($_.Data -eq $Line.Data) -and ($_.Value -eq $d.Key ) } | % {
+                $Key=$_.Key ; $Type= $_.Type
+            }
+
+            $Value = Convert-Datatype -Option $Type -Value $d.Value
+            $PSO | % { $_ | Add-Member -Type NoteProperty -Name $Key -Value $Value }
+        }
+
+        if ($Data -ne "") {
+            $PSO | Add-Member -Name $Data -Value $Line.Data -Type NoteProperty
+            $Sort += $Data
+        }
+        if ($Fileinfo -ne "") {
+            $PSO | Add-Member -Name $Fileinfo -Value $Line.Fileinfo -Type NoteProperty
+            $Sort += $Fileinfo
+        }
+        $PSO | Select-Object $Sort
+    }
+}
+
+
+Function Convert-PSObject {
+    param(
+        [String]$Fullame,
+        [string]$Encoding = "UTF8",
+        [psobject]$Schema,
+        [psobject[]]$LabelPSO=@(),
+        [string[]]$DataNames=@(),
+        [string]$Data ="",
+        [string]$Fileinfo=""
+    )
+    $Con = Convert-TexttoData -FullName $Fullame -Encoding $Encoding
+    
+    $Con | ? { $_.Data -in $DataNames} -PipelineVariable Line | % {
+        $Sort = $Schema | ? { $_.Data -eq $Line.Data } | Sort-Object KNo | % Key
+        if ($LabelPSO.count -eq 0) {
+            $PSO = New-Object PSObject
+        } else {
+            $PSO = $LabelPSO | Select-Object *
+        }
+
+        Foreach ( $d in (Convert-Cologn $Line.Contents) ){
+            $Key  = $d.Key
+            $Type = "String"
+
+            $Schema | ?{ ($_.Data -eq $Line.Data) -and ($_.Value -eq $d.Key ) } | % {
+                $Key=$_.Key ; $Type= $_.Type
+            }
+
+            $Value = Convert-Datatype -Option $Type -Value $d.Value
+            $PSO | % { $_ | Add-Member -Type NoteProperty -Name $Key -Value $Value }
+        }
+
+        if ($Data -ne "") {
+            $PSO | Add-Member -Name $Data -Value $Line.Data -Type NoteProperty
+            $Sort += $Data
+        }
+        if ($Fileinfo -ne "") {
+            $PSO | Add-Member -Name $Fileinfo -Value $Line.Fileinfo -Type NoteProperty
+            $Sort += $Fileinfo
+        }
+        $PSO | Select-Object $Sort
     }
 }
 
@@ -230,86 +361,29 @@ function Convert-DyFileToPSO {
         [string[]]$Schema = @(),
         [string]$Label="",
         [string]$Split="",
-        [string]$ID="",
         [string]$Data ="",
         [string]$Fileinfo="",
         [string]$Encoding="UTF8"
     )
 
-    $g=1
-    $SCO = $Schema | % { Read-DySchema $_ }
-    if ($Input.count -eq 0) {
-        $Output = $FullName
-    } else {
-        $Output = $Input
-    }
+    if ($Input.count -eq 0) { $Output = $FullName } else { $Output = $Input }
+    $DataNames = $DataNames | ? { $_ -ne $Label }
 
-    $Parent = if( $DataNames.Count -eq 0 -and $Schema.Count -eq 0) {
-        $Output | % { Convert-TexttoData $_ -Encoding $Encoding } |
-        %{ $_ | Add-Member -MemberType NoteProperty -Name ID -Value $g ; $g++ ;$_}
-    } else {
-        if ( $DataNames.Count -eq 0) {
-            $DataNames = $SCO | Select-Object -ExpandProperty Data -Unique
-        } else {$DataNames += $Label}
-        $Output | % { Convert-TexttoData $_ -Encoding $Encoding } | ?{ $_.Data -in $DataNames } |
-        %{ $_ | Add-Member -MemberType NoteProperty -Name ID -Value $g ; $g++;$_}
-    }    
+    $Scm = $Schema | %{ Read-DySchema $_ }
 
-    %{ $Parent } -PipelineVariable Master | % {Convert-Cologn $Master.Contents} -PipelineVariable Child |
-    %{
-        New-Object PSObject -Property @{
-            ID = $Master.ID;
-            Data = $Master.Data;
-            Key = $Child.Key;
-            Value= $Child.value;
-            Fileinfo = $Master.Fileinfo
-        }
-    } | Group-Object ID -PipelineVariable gp |  % { $Label_GP = @() ;$Is_Label = $false} {
-        $M_Data = $Parent | ? {$_.ID -eq $gp.Name } | % Data
-        $M_Fileinfo = $Parent | ? {$_.ID -eq $gp.Name } | % Fileinfo
-        
-        if (($M_Data -ne "" ) -and ($M_Data -eq $Label) -and ($Is_Label -eq $false)) {
-            $Label_GP = @() ; $Label_GP += $gp.Group ; $Is_Label = $true ; return
-        } elseif (($M_Data -ne "" ) -and ($M_Data -eq $Label) -and ($Is_Label -eq $true)) {
-            $Label_GP += $gp.Group ; return
+    $el = $FullName | % {
+        if ($Label -ne "") {
+            $PSO = Convert-PSObject -Encoding $Encoding -Schema $Scm -DataNames $Label -Fullame $_
+            Convert-PSObject -Encoding $Encoding -Schema $Scm -DataNames $DataNames -LabelPSO $PSO `
+            -Fullame $_ -ID $ID -Data $Data -Fileinfo $Fileinfo
         } else {
-            $Is_Label = $false
-        }
-
-        %{ if ($Label -ne "") { $Label_GP | Group-Object ID } else { $gp } } | % {
-            $el = New-Object psobject 
-            %{ if($Label -ne "" ){
-                    ($_.Group | ? { $_.Key -notin $gp.Group.Key}) + $gp.Group
-                } else { $_.Group }
-            } -PipelineVariable mb | %{
-                if($SCO.count -eq 0) {
-                # スキーマが設定されていない時の挙動。全ての値が出力される。
-                    $el | Add-Member -MemberType NoteProperty -Name $mb.Key -Value $mb.Value
-
-                } elseif ($SCO.Value -contains $mb.Key ) {
-                # スキーマが設定されているときの挙動。スキーマが設定されている場合、スキーマに無い項目は出力されない。
-
-                    $Member_Element = $SCO | ? { ($_.Value -eq $mb.Key) -and ($_.Data -eq $mb.Data) } | Select-Object * -First 1
-                    $Member_Name = $Member_Element | % Key
-                    if(($Member_Element | % Option) -ne "" ) { $Member_Type = "String" } `
-                    else { $Member_Type = $Member_Element | % Type}
-
-                    if ( $Member_Name.Count -eq 1 ) {
-                        $el | Add-Member -MemberType NoteProperty `
-                        -Name $Member_Name -Value (Convert-Datatype $Member_Type $_.Value)
-                    }
-                }
-            }
-
-            # オプションに指定された要素の追加
-            if ($ID -ne "") {$el | Add-Member -MemberType NoteProperty -Name $ID -Value $gp.Name}
-            if ($Data -ne "") {$el | Add-Member -MemberType NoteProperty -Name $Data -Value $M_Data }
-            if ($Fileinfo -ne "") {$el | Add-Member -MemberType NoteProperty -Name $Fileinfo -Value $M_Fileinfo }
-
-            # Splitの処理
-            if ($Split -ne "") {
-                Convert-DySplitData -PSObject $el -Member $Split -Option ($SCO | ?{$_.Key -eq $Split } | % Option) -Type ($SCO | ?{$_.Key -eq $Split } | % Type)
-            } else { $el }
+            Convert-PSObject -Encoding $Encoding -Schema $Scm -DataNames $DataNames `
+            -Fullame $_ -ID $ID -Data $Data -Fileinfo $Fileinfo
         }
     }
+
+    # Splitの処理
+    if ($Split -ne "") {
+        Convert-DySplitData -PSObject $el -Member $Split -Option ($SCO | ?{$_.Key -eq $Split } | % Option) -Type ($SCO | ?{$_.Key -eq $Split } | % Type)
+    } else { $el }
 }
