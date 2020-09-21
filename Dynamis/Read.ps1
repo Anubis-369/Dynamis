@@ -235,10 +235,11 @@ Function Convert-PSObject {
     $Con = Convert-TexttoData -FullName $Fullame -Encoding $Encoding
     
     $Con | ? { $_.Data -in $DataNames} -PipelineVariable Line | % {
-        $Sort = $Schema | ? { $_.Data -eq $Line.Data } | Sort-Object KNo | % Key
+
         if ($LabelPSO.count -eq 0) {
             $PSO = New-Object PSObject
         } else {
+
             $PSO = $LabelPSO | Select-Object *
         }
 
@@ -262,7 +263,7 @@ Function Convert-PSObject {
             $PSO | Add-Member -Name $Fileinfo -Value $Line.Fileinfo -Type NoteProperty
             $Sort += $Fileinfo
         }
-        $PSO | Select-Object $Sort
+        $PSO
     }
 }
 
