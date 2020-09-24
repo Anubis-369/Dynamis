@@ -1,17 +1,42 @@
-$EW = @()
-$EW += "\s*\S+:(?:\n|$)"
-$EW += "\s*< \S+ >(?:\n|$)"
-$EW += "\s*\S+\s*: .+(?:\n|$)"
 
-$Esc = ("(?:.|\n(?!{" + (@(0..(($EW.count) - 1)) -join ("}|{")) + "}))") -f $EW
+function Write-DyPSOToFile {
+    param(
+        [string[]]$Properties,
+        [string]$DataName = "",
+        [string]$Schema = "",
+        [psobject[]]$PSO,
+        [string]$Output,
+        [string]$Encoding = "UTF8"
+    )
+    begin {
 
-$HT = @()
-$HT += "(?:^|\n)\s*(?<title>\S+):"
-$HT += "(?:^|\n)\s*< (?<title>\S+) >"
-$Titles = ("{" + (@(0..(($HT.count) - 1)) -join ("}|{")) + "}") -f $HT
+        if ((Test-path $Schema) ) {
+            $Scm = Read-DySchema $Schema -DataNames $DataName -Encoding $Encoding
+            $MaxCount = $Sem.Value | % {              
+                [System.Text.Encoding]::GetEncoding("shift_jis").GetByteCount( $_ )
+            } | Measure-Object -Maximum | % Maximum
+        } else {
+            $Scm = ""
+            $MaxCount = $Properties | %{
+                [System.Text.Encoding]::GetEncoding("shift_jis").GetByteCount( $_ )
+            } | Measure-Object -Maximum | % Maximum
+        }
+    }
+    process {
+        echo ("-- {0} --" -f $DataName )
+        Foreach ( $d in $PSO ) {
+            foreach ($p in $Properties) {
+                if ( $Scm -ne "") {
+                    $Title =  $Scm | ? {$_.Key -eq $p} | % Value
+                } else {
+                    $Title = $p
+                }
 
-$Hit_para = "(?<={0})\n(?<value>{1}+)" -f $Titles, $Esc
-
-$Hit_l = "(?<=(?:^|\n|,))\s*(?<title>\S+?)\s*: (?<value>(?:.+?(?=\s+,\s+\S+\s*: )|{0}+))" -f $Esc
-
-$Main = [regex]("(?:{0}|{1})" -f $Hit_para, $Hit_l)
+                $2BitCount = [System.Text.Encoding]::GetEncoding("shift_jis").GetByteCount( $Title ) - $Title.count
+                $Line = $Title  + (" " * (($MaxCount + 1 ) - $Title.count -$2BitCount)) + ": " + ($d.$p).Trim() #>> $Path
+                echo $line
+            }
+            echo "`n----`n"
+        }
+    }
+}

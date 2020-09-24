@@ -44,7 +44,7 @@ function Convert-Cologn ($Contents){
     $EW = @()
     $EW += "\S+:(?:\n|$)"
     $EW += "< \S+ >(?:\n|$)"
-    $EW += "\S+\s*: .+(?:\n|$)"
+    $EW += "\S+\s*: .*(?:\n|$)"
     
     $Esc = ("(?:.|\n(?!{" + (@(0..(($EW.count) - 1)) -join ("}|{")) + "}))") -f $EW
     
@@ -372,7 +372,7 @@ function Convert-DyFileToPSO {
 
     $Scm = $Schema | %{ Read-DySchema $_ }
 
-    $el = $FullName | % {
+    $el = $Output | % {
         if ($Label -ne "") {
             $PSO = Convert-PSObject -Encoding $Encoding -Schema $Scm -DataNames $Label -Fullame $_
             Convert-PSObject -Encoding $Encoding -Schema $Scm -DataNames $DataNames -LabelPSO $PSO `
