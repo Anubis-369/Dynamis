@@ -1,4 +1,17 @@
 
+Function Write-DyPSObject {
+    param(
+        [psobject]$Schema="",
+        [psobject]$PSO,
+        [string]$Encoding = "UTF8",
+        [string[]]$Properties = @()
+    )
+    if($Properties.count -eq 0){$Properties = $PSO.psobject.properties }
+    if ( $Schema -eq "" ) { $Titlees = $Properties } else {
+        #$Properties | %{ $Schema }
+    }
+}
+
 function Write-DyPSOToFile {
     param(
         [string[]]$Properties,

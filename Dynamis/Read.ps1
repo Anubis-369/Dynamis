@@ -42,20 +42,19 @@ function Convert-Cologn ($Contents){
     <Title> +: <Value>, s+<Title> +: <Value>
     #>
     $EW = @()
-    $EW += "\S+:(?:\n|$)"
-    $EW += "< \S+ >(?:\n|$)"
-    $EW += "\S+\s*: .*(?:\n|$)"
+    $EW += "< [^ \t\n\r\f:]+ >(?:\n|$)"
+    $EW += "(?:[^ \t\n\r\f:]+ )*(?!:)\S+\s ?.*(?:\n|$)"
     
     $Esc = ("(?:.|\n(?!{" + (@(0..(($EW.count) - 1)) -join ("}|{")) + "}))") -f $EW
     
     $HT = @()
-    $HT += "(?<title>\S+):"
-    $HT += "< (?<title>\S+) >"
-    $Titles = ("(:?(:?{" + (@(0..(($HT.count) - 1)) -join ("})|({")) + "}))") -f $HT
+    $HT += "(?<title>(?:[^ \t\n\r\f:]+ )*(?!:)\S+):"
+    $HT += "< (?<title>(?:[^ \t\n\r\f:]+ )*\S+) >"
+    $Titles = ("(?:(?:{" + (@(0..(($HT.count) - 1)) -join ("})|({")) + "}))") -f $HT
     
     $Hit_para = "(?<=(?<join>^|\n)){0}(?<indent>\n)(?<value>{1}+)" -f $Titles, $Esc
     
-    $Hit_l = "(?<=(?<join>^|\n|(:? , )))(?<title>\S+?)(?<indent>\s*): (?<value>(?:.+?(?= , \S+\s*: )|{0}+))" -f $Esc
+    $Hit_l = "(?<=(?<join>^|\n|(:? , )))(?<title>(?:[^ \t\n\r\f:]+ )*?[^ \t\n\r\f:]+?)(?<indent>\s*): (?<value>(?:.+?(?= , (?:[^ \t\n\r\f:]+ )*?[^ \t\n\r\f:]+?: )|{0}+))" -f $Esc
     
     $Main = [regex]("(?:{0}|{1})" -f $Hit_para, $Hit_l)
 
@@ -368,7 +367,7 @@ function Convert-DyFileToPSO {
     )
 
     if ($Input.count -eq 0) { $Output = $FullName } else { $Output = $Input }
-    $DataNames = $DataNames | ? { $_ -ne $Label }
+    if($DataNames.count -eq 0) { $DataNames = @("") } else { $DataNames = $DataNames | ? { $_ -ne $Label } }
 
     $Scm = $Schema | %{ Read-DySchema $_ }
 
