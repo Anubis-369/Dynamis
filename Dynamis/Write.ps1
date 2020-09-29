@@ -38,7 +38,7 @@ Function Convert-DefaultSchema {
     }
 }
 
-Function Convert-BaseData {
+Function Convert-SingleData {
     param(
         [psobject]$PSO,
         [psobject]$Schema,
@@ -93,16 +93,15 @@ Function Convert-BaseData {
             }
         }
     }
-    return $Result
+    return $Result.Trim()
 }
 
 
-Function Write-DyPSO {
+Function Write-DyPSOToData {
     param(
         [psobject[]]$PSO,
         [string]$Schema = "",
-        [string]$DataName = "",
-        [string]$Encoding = "UTF8"
+        [string]$DataName = ""
     )
     begin {
         if ( Test-Path $Schema) {$Scm = Read-DySchema $Schema -Encoding $Encoding }
@@ -111,52 +110,15 @@ Function Write-DyPSO {
     Process {
         foreach ( $el in $PSO) {
             if (!(Test-Path $Schema)) { $Scm = Convert-DefaultSchema $el }
-            $Result += Convert-BaseData -PSO $PSO -Schema $Scm -DataName $DataName
+            $Result += Convert-SingleData -PSO $PSO -Schema $Scm -DataName $DataName
         }
     }
     end {
-        $Result.Join("`n`n`n----`n")
-    }
-}
-
-function Write-DyPSOToFile {
-    param(
-        [string[]]$Properties,
-        [string]$DataName = "",
-        [string]$Schema = "",
-        [psobject[]]$PSO,
-        [string]$Output,
-        [string]$Encoding = "UTF8"
-    )
-    begin {
-
-        if ((Test-path $Schema) ) {
-            $Scm = Read-DySchema $Schema -DataNames $DataName -Encoding $Encoding
-            $MaxCount = $Sem.Value | % {              
-                [System.Text.Encoding]::GetEncoding("shift_jis").GetByteCount( $_ )
-            } | Measure-Object -Maximum | % Maximum
-        } else {
-            $Scm = ""
-            $MaxCount = $Properties | %{
-                [System.Text.Encoding]::GetEncoding("shift_jis").GetByteCount( $_ )
-            } | Measure-Object -Maximum | % Maximum
+        $Output = $Result.Join("`n`n`n----`n")
+        if ( $DataName -ne "" ) {
+            $header = "-- {0} --`n" -f $DataName
+            $Output = $header + $Output
         }
-    }
-    process {
-        echo ("-- {0} --" -f $DataName )
-        Foreach ( $d in $PSO ) {
-            foreach ($p in $Properties) {
-                if ( $Scm -ne "") {
-                    $Title =  $Scm | ? {$_.Key -eq $p} | % Value
-                } else {
-                    $Title = $p
-                }
-
-                $2BitCount = [System.Text.Encoding]::GetEncoding("shift_jis").GetByteCount( $Title ) - $Title.count
-                $Line = $Title  + (" " * (($MaxCount + 1 ) - $Title.count -$2BitCount)) + ": " + ($d.$p).Trim() #>> $Path
-                echo $line
-            }
-            echo "`n----`n"
-        }
+        return $Output.Trim()
     }
 }
