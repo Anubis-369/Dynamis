@@ -1,7 +1,7 @@
 
 Function Convert-DefaultSchema {
     param (
-        [Parameter(Mandatory=$true)][string]$PSO
+        [Parameter(Mandatory=$true)][psobject]$PSO
     )
     $Properties = $PSO.psobject.properties.Name
     $MaxCount = $Properties | % {
@@ -12,7 +12,7 @@ Function Convert-DefaultSchema {
 
     foreach ( $el in $Properties ) { 
         $Len = $MaxCount - ( $el.length + `
-        ([System.Text.Encoding]::GetEncoding("utf-8").GetByteCount( $el ) - $el.length) / 2 )
+        ([System.Text.Encoding]::GetEncoding("utf-8").GetByteCount( $el ) - $el.length) / 2 ) + 1
 
         New-Object PSObject -Property @{
             DNo         = 0;
@@ -45,10 +45,12 @@ Function Convert-BaseData {
         [string]$DataName = ""
     )
     $Result = ""
+    $DataIndentCount = 0
     $Schema = $Schema | ? { $_.Data -eq $DataName }
+
     foreach ( $el in $Schema ) {
         $Title        = $el.Value
-        $Value        = $PSO | % ($el.Key)
+        $Value        = [string]($PSO | % ($el.Key))
         $Title_Indent = " "  * $el.TitleIndent
         $Endline      = "`n" * $el.EndLine
 
@@ -65,8 +67,11 @@ Function Convert-BaseData {
 
             if ( $Endline.length -eq 0) {
                 $CanJoin = $True
-                $DataIndentCount = $el.DataIndent - ( $Value.length + `
-                ([System.Text.Encoding]::GetEncoding("utf-8").GetByteCount( $Value ) - $Value.length) / 2 )
+                $DataLength = $Value.length + `
+                (([System.Text.Encoding]::GetEncoding("utf-8").GetByteCount( $Value ) - $Value.length) / 2 )
+                if ( $el.DataIndent -gt $DataLength) {
+                    $DataIndentCount = $el.DataIndent - $DataLength
+                } else { $DataIndentCount = 0 }
             } else {
                 $CanJoin = $False
             }
@@ -77,13 +82,18 @@ Function Convert-BaseData {
 
             if ( $Endline.length -eq 0) {
                 $CanJoin = $True
-                $DataIndentCount = $el.DataIndent - ( $Value.length + `
-                ([System.Text.Encoding]::GetEncoding("utf-8").GetByteCount( $Value ) - $Value.length) / 2 )
+                $DataLength = $Value.length + `
+                (([System.Text.Encoding]::GetEncoding("utf-8").GetByteCount( $Value ) - $Value.length) / 2 )
+                if ( $el.DataIndent -gt $DataLength) {
+                    $DataIndentCount = $el.DataIndent - $DataLength
+                } else { $DataIndentCount = 0 }
+
             } else {
                 $CanJoin = $False
             }
         }
     }
+    return $Result
 }
 
 
