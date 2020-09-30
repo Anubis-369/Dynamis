@@ -99,12 +99,12 @@ Function Convert-SingleData {
 Function Write-DyPSOToData {
     param(
         [psobject[]]$PSO,
-        [string]$Schema = "",
+        [string]$Schema = "-",
         [string]$DataName = "",
         [string]$Encoding = "UTF8"
     )
     begin {
-        if ( Test-Path $Schema) {$Scm = Read-DySchema $Schema -Encoding $Encoding }
+        if ( Test-Path $Schema ) {$Scm = Read-DySchema $Schema -Encoding $Encoding }
         $Result = @()
     }
     Process {
@@ -127,8 +127,7 @@ function Write-DyDefaultSchema {
     param(
         [psobject[]]$PSO,
         [switch]$Position,
-        [switch]$Style,
-        [string]$Dataname
+        [string]$DataName
     )
 
     $Result = New-Object PSObject
@@ -141,15 +140,11 @@ function Write-DyDefaultSchema {
         If ($position -eq $True) {
             $Value += "[{0},{1},{2}]" -f $el.EndLine,$el.TitleIndent,$el.DataIndent
         }
-        
-        If ($Style -eq $True) {
-            if (($el.LongData -eq $True) -and ($el.Join -eq $False)) {
-                $Value = "l" + $Value
-            } elseif (($el.LongData -eq $False) -and ($el.Join -eq $True)){
-                $Value = "," + $Value
-            }
-        }
+
         $Result | Add-Member -Type NoteProperty -Name $Title -Value $Value
     }
-    Write-DyPSOToData -PSO $Result -DataName $DataName
+    $Header = "-- {0} --`n" -f $DataName
+    $Body  = Write-DyPSOToData -PSO $Result
+
+    return $Header + $Body
 }
