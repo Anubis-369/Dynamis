@@ -1,5 +1,5 @@
 -- Main --
-No: [No:Int]3 , 起票日: [StartDate:DateTime]10 , 起票者: [Voter:String]
+No: [No:Int][0,0,2] , 起票日: [StartDate:DateTime][0,0,20] , 起票者: [Voter:String][1,0,0]
 タイトル : [Subject:String]
 
 内容:

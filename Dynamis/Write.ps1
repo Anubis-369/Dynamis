@@ -96,12 +96,12 @@ Function Convert-SingleData {
     return $Result.Trim()
 }
 
-
 Function Write-DyPSOToData {
     param(
         [psobject[]]$PSO,
         [string]$Schema = "",
-        [string]$DataName = ""
+        [string]$DataName = "",
+        [string]$Encoding = "UTF8"
     )
     begin {
         if ( Test-Path $Schema) {$Scm = Read-DySchema $Schema -Encoding $Encoding }
@@ -110,15 +110,46 @@ Function Write-DyPSOToData {
     Process {
         foreach ( $el in $PSO) {
             if (!(Test-Path $Schema)) { $Scm = Convert-DefaultSchema $el }
-            $Result += Convert-SingleData -PSO $PSO -Schema $Scm -DataName $DataName
+            $Result += Convert-SingleData -PSO $el -Schema $Scm -DataName $DataName
         }
     }
     end {
-        $Output = $Result.Join("`n`n`n----`n")
+        $Output = $Result -Join "`n`n`n----`n"
         if ( $DataName -ne "" ) {
             $header = "-- {0} --`n" -f $DataName
             $Output = $header + $Output
         }
         return $Output.Trim()
     }
+}
+
+function Write-DyDefaultSchema {
+    param(
+        [psobject[]]$PSO,
+        [switch]$Position,
+        [switch]$Style,
+        [string]$Dataname
+    )
+
+    $Result = New-Object PSObject
+    $Scm = Convert-DefaultSchema $PSO
+
+    foreach ( $el in $Scm){
+        $Title = $el.Value
+        $Value = "[{0}]" -f $el.Key
+        
+        If ($position -eq $True) {
+            $Value += "[{0},{1},{2}]" -f $el.EndLine,$el.TitleIndent,$el.DataIndent
+        }
+        
+        If ($Style -eq $True) {
+            if (($el.LongData -eq $True) -and ($el.Join -eq $False)) {
+                $Value = "l" + $Value
+            } elseif (($el.LongData -eq $False) -and ($el.Join -eq $True)){
+                $Value = "," + $Value
+            }
+        }
+        $Result | Add-Member -Type NoteProperty -Name $Title -Value $Value
+    }
+    Write-DyPSOToData -PSO $Result -DataName $DataName
 }

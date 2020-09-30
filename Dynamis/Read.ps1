@@ -1,6 +1,6 @@
 ﻿function Convert-TexttoData ( [string]$FullName,[string]$Encoding = "UTF8") {
-    $Paragraph_Regex = [regex]"(?:-- (?<title>\S+) --(:?\n|^))(?<value>(?:.|\n(?!-- \S+ --\n))*)"
-    $Delimita = "----"
+    $Paragraph_Regex = [regex]"(?<=\n|^)-- (?<title>\S+) --\n(?<value>(?:.|\n(?!-- \S+ --\n))*)"
+    $Delimita = "`n----`n"
     $Split_Data = [regex]("(?<value>(?:.|\n)+?)(?:$Delimita|$)")
 
     $Contents = (Get-Content -Path $FullName -Encoding $Encoding -Raw) -replace "`r`n" ,"`n"
@@ -52,9 +52,9 @@ function Convert-Cologn ($Contents){
     $HT += "< (?<title>(?:[^ \t\n\r\f:]+ )*\S+) >"
     $Titles = ("(?:(?:{" + (@(0..(($HT.count) - 1)) -join ("})|({")) + "}))") -f $HT
     
-    $Hit_para = "(?<=(?<join>^|\n)){0}(?<indent>\n)(?<value>{1}+)" -f $Titles, $Esc
+    $Hit_para = "(?<=(?<join>^|\n)){0}(?<indent>\n|$)(?<value>{1}*)" -f $Titles, $Esc
     
-    $Hit_l = "(?<=(?<join>^|\n|(:? , )))(?<title>(?:[^ \t\n\r\f:]+ )*?[^ \t\n\r\f:]+?)(?<indent>\s*): (?<value>(?:.+?(?= , (?:[^ \t\n\r\f:]+ )*?[^ \t\n\r\f:]+?: )|{0}+))" -f $Esc
+    $Hit_l = "(?<=(?<join>^|\n|(:? , )))(?<title>(?:[^ \t\n\r\f:]+ )*?[^ \t\n\r\f:]+?)(?<indent>\s*): (?<value>(?:.*?(?= , (?:[^ \t\n\r\f:]+ )*?[^ \t\n\r\f:]+?: )|{0}*))" -f $Esc
     
     $Main = [regex]("(?:{0}|{1})" -f $Hit_para, $Hit_l)
 
@@ -132,7 +132,7 @@ function Read-DySchema {
         [string[]]$DataNames=@(),
         [string]$Encoding = "UTF8"
     )
-    $Key_Devide = [regex]"^(?<style>(:?,|l)?)\[(?<Key>\S+)\](:?\[(?<Position>)\])?(:? -(?<Option>.*))?"
+    $Key_Devide = [regex]"^(?<style>(?:,|l)?)\[(?<Key>\S+?)\](?:\[(?<Position>\S+)\])?(?: -(?<Option>.*))?"
 
     $Parent = if( $DataNames.Count -eq 0 ) {
         $FullName | % { Convert-TexttoData $_ -Encoding $Encoding}
@@ -149,6 +149,8 @@ function Read-DySchema {
         $Option      =  $Key_Devide.Matches($Val[0]) | % { $_.Groups["Option"].Value }
         $Position    = ($Key_Devide.Matches($Val[0]) | % { $_.Groups["Position"].Value }) -split ","
         $Description =  if($Val.length -gt 1) {($Val[1..($Val.length-1)] -join "`n").Trim()}
+
+        echo $Position
 
         # インデントの調整
         $EndLine       = if($Position[0] -ne "") { $Position[0] } else { $Child.EndLine }
@@ -384,6 +386,7 @@ function Convert-DyFileToPSO {
 
     # Splitの処理
     if ($Split -ne "") {
-        Convert-DySplitData -PSObject $el -Member $Split -Option ($SCO | ?{$_.Key -eq $Split } | % Option) -Type ($SCO | ?{$_.Key -eq $Split } | % Type)
+        Convert-DySplitData -PSObject $el -Member $Split -Option ($SCO | ?{$_.Key -eq $Split } |% Option)`
+         -Type ($SCO | ?{$_.Key -eq $Split } | % Type)
     } else { $el }
 }

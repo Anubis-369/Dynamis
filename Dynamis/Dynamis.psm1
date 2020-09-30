@@ -1,2 +1,2 @@
 ﻿Get-ChildItem $PSScriptRoot | ?{ $_.Extension -eq ".ps1" } | %{ . $_.FullName }
-Export-ModuleMember -Function Convert-DyFileToPSO,Read-DySchema,Convert-DySplitData,Write-DyPSO,Convert-SingleData,Convert-DefaultSchema,Convert-DefaultSchema,Write-DyPSOToData
+Export-ModuleMember -Function Convert-DyFileToPSO,Read-DySchema,Convert-DySplitData,Write-DyPSO,Write-DyPSOToData,Write-DyDefaultSchema
