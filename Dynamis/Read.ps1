@@ -240,7 +240,6 @@ Function Convert-PSObject {
         if ($LabelPSO.count -eq 0) {
             $PSO = New-Object PSObject
         } else {
-
             $PSO = $LabelPSO | Select-Object *
         }
 
